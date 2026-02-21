@@ -44,7 +44,7 @@ pip install PySide6 opencv-python pyaudio google-genai python-dotenv pillow nump
 ## 🔑 Setup
 
 1. Clone or download this repository
-2. Create a `.env` file in the same folder as `ada.py`:
+2. Create a `.env` file in the same folder as `wilson.py`:
 
 ```
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -56,7 +56,7 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 3. Run the assistant:
 
 ```
-python ada.py
+python wilson.py
 ```
 
 ---
@@ -68,8 +68,8 @@ By default, Ada knows how to open common apps like Chrome, Discord, Notepad, etc
 Find the `app_map` dictionary inside the `_open_application` function (search for `app_map = {`) and add your app like this:
 
 ```python
-"mumuplayer": r"C:\Program Files\Microvirt\MuMuPlayer\MuMuPlayer.exe",
-"mumu": r"C:\Program Files\Microvirt\MuMuPlayer\MuMuPlayer.exe",
+"mumuplayer": r"C:\Program Files\Netease\MuMuPlayer\nx_main\MuMuNxMain.exe",
+"filmora": r""C:\Program Files\Wondershare Filmora\Wondershare Filmora Launcher.exe",
 "my game": r"C:\Program Files\MyGame\game.exe",
 ```
 
@@ -92,6 +92,7 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 | "file explorer" | Windows Explorer |
 | "cmd" / "command prompt" | Command Prompt |
 | "powershell" | PowerShell |
+| "task manager " | Task Manager |
 | "outlook" | Microsoft Outlook |
 | "word" | Microsoft Word |
 | "edge" | Microsoft Edge |
@@ -111,7 +112,7 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 - *"Create a file called notes.txt"*
 - *"Open facebook.com"*
 - *"Search for class suspension Philippines 2026"*
-- *"Search lo siento wilson"*
+- *"Search Wilson lo siento"*
 
 ---
 
