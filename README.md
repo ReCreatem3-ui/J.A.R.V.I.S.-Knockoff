@@ -63,7 +63,7 @@ python wilson.py
 
 ## 🗎 Adding Custom App Paths
 
-By default, Ada knows how to open common apps like Chrome, Discord, Notepad, etc. If an app fails to open, you can add it manually in `ada.py`.
+By default, Wilson knows how to open common apps like Chrome, Discord, Notepad, etc. If an app fails to open, you can add it manually in `wilson.py`.
 
 Find the `app_map` dictionary inside the `_open_application` function (search for `app_map = {`) and add your app like this:
 
