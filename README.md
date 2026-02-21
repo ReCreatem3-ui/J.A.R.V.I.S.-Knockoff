@@ -88,14 +88,16 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 | "brave" / "brave browser" | Brave Browser |
 | "firefox" | Firefox |
 | "edge" / "microsoft edge" | Microsoft Edge |
-| "discord" | Discord |
 | "vlc" | VLC Media Player |
-| "vs code" / "vscode" | Visual Studio Code |
 | "file explorer" | Windows Explorer |
 | "cmd" / "command prompt" | Command Prompt |
 | "powershell" | PowerShell |
-| "outlook" | Outlook |
-| "linkedin" | LinkedIn |
+| "outlook" | Microsoft Outlook |
+| "word" | Microsoft Word |
+| "edge" | Microsoft Edge |
+| "powerpoint" | Microsoft Powerpoint |
+| "microsoft teams" | Microsoft Teams |
+| "calculator " | Windows Calculator | 
 
 ---
 
@@ -109,6 +111,7 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 - *"Create a file called notes.txt"*
 - *"Open facebook.com"*
 - *"Search for class suspension Philippines 2026"*
+- *"Search lo siento wilson"*
 
 ---
 
