@@ -52,8 +52,8 @@ SEND_SAMPLE_RATE = 16000
 RECEIVE_SAMPLE_RATE = 24000
 CHUNK_SIZE = 1024
 MODEL = "gemini-2.5-flash-native-audio-latest"
-VOICE_TYPE= 'Orus' # Options: Aoede, Charon, Fenrir, Kore, Puck, Leda, Orus, Zephyr
-DEFAULT_MODE = "camera"  # Options: "camera", "screen", "none"
+VOICE_TYPE= 'Kore' # Voice Options: Aoede, Charon, Fenrir, Kore, Puck, Leda, Orus, Zephyr
+DEFAULT_MODE = "camera"  # Mode Options: "camera", "screen", "none"
 MAX_OUTPUT_TOKENS = 100
 
 # --- Initialize Clients ---
@@ -384,10 +384,9 @@ class AI_Core(QObject):
                     "steam": "steam.exe",
                     "epic games": "epicgameslauncher.exe",
                     "epic": "epicgameslauncher.exe",
-                    "mumuplayer": "mumuplayer.exe",
-                    "mumu": "mumuplayer.exe",
-                    "mumu player": "mumuplayer.exe",
-                    "bluestacks": "bluestacks.exe",
+                    "mumuplayer": "MuMuNxMain.exe",
+                    "mumu": "MuMuNxMain.exe",
+                    "mumu player": "MuMuNxMain.exe",
                     "vs code": "code.exe",
                     "vscode": "code.exe",
                     "visual studio code": "code.exe",
@@ -405,6 +404,7 @@ class AI_Core(QObject):
                     "zoom": "zoom.exe",
                     "telegram": "telegram.exe",
                     "whatsapp": "whatsapp.exe",
+                    "filmora": "Wondershare Filmora Launcher.exe"
                 }
                 exe = app_map.get(name_lower)
                 if exe:
