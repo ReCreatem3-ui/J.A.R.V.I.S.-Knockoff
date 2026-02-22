@@ -15,7 +15,7 @@ import webbrowser
 import math
 
 # --- PySide6 GUI Imports ---
-from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QLabel,
+from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QTextBrowser, QLabel,
                                QVBoxLayout, QWidget, QLineEdit, QHBoxLayout,
                                QSizePolicy, QPushButton)
 from PySide6.QtCore import QObject, Signal, Slot, Qt, QTimer
@@ -165,6 +165,9 @@ class AI_Core(QObject):
     search_results_received = Signal(list)
     code_being_executed = Signal(str, str)
     file_list_received = Signal(str, list)
+    file_search_received = Signal(str, list)   # (query, matched_paths)
+    file_opened_received = Signal(str)          # (opened_file_path)
+    tool_activity_received = Signal(str, str)  # (tag, html_body) — generic activity signal
     video_mode_changed = Signal(str)
     speaking_started = Signal()
     speaking_stopped = Signal()
@@ -273,6 +276,10 @@ class AI_Core(QObject):
                 types.FunctionDeclaration(name="open_website", description="Opens a URL in the browser.", parameters=types.Schema(type="OBJECT", properties={"url": types.Schema(type="STRING")}, required=["url"])),
                 types.FunctionDeclaration(name="open_direct_youtube", description="Opens a YouTube search filtered by channel or video. Use when the user wants to find a specific YouTuber or video.", parameters=types.Schema(type="OBJECT", properties={"query": types.Schema(type="STRING"), "content_type": types.Schema(type="STRING", description="channel, video, or search")}, required=["query"])),
                 types.FunctionDeclaration(name="search_and_open", description="Finds and opens a person, channel, or topic on a platform directly. Use for requests like 'open Ejiogu Dennis on YouTube'.", parameters=types.Schema(type="OBJECT", properties={"query": types.Schema(type="STRING"), "platform": types.Schema(type="STRING", description="youtube or google")}, required=["query"])),
+                types.FunctionDeclaration(name="close_application", description="Closes a running application, browser, or program by name. Use when the user says 'close', 'exit', 'quit', or 'kill' an app.", parameters=types.Schema(type="OBJECT", properties={"application_name": types.Schema(type="STRING", description="The name of the app to close, e.g. Chrome, Discord, Spotify, Brave.")}, required=["application_name"])),
+                types.FunctionDeclaration(name="search_file", description="Searches for a file by name across Desktop, Downloads, Documents, Videos, Music and Pictures folders. Use when user asks to find a file.", parameters=types.Schema(type="OBJECT", properties={"filename": types.Schema(type="STRING", description="The filename or partial name to search for.")}, required=["filename"])),
+                types.FunctionDeclaration(name="open_file", description="Opens any file using the system default app. Works for mp4, exe, images, PDFs, etc. Can search automatically if full path unknown.", parameters=types.Schema(type="OBJECT", properties={"file_path": types.Schema(type="STRING", description="Full path to the file if known."), "filename": types.Schema(type="STRING", description="Filename to search for if full path unknown.")}, required=[])),
+                types.FunctionDeclaration(name="move_file", description="Moves or relocates a file from one location to another. Use when the user wants to move, relocate, or transfer a file to a different folder.", parameters=types.Schema(type="OBJECT", properties={"source_path": types.Schema(type="STRING", description="Full path of the file to move."), "destination_path": types.Schema(type="STRING", description="Destination folder or full file path. Accepts shortcuts like 'Desktop', 'Downloads', 'Documents', 'Videos', 'Music', 'Pictures'.")}, required=["source_path", "destination_path"])),
             ])
         ]
 
@@ -297,7 +304,12 @@ class AI_Core(QObject):
             6. To find and open a specific YouTuber or their channel, use search_and_open with platform=youtube. For example if user says 'open Ejiogu Dennis on YouTube', call search_and_open(query='Ejiogu Dennis', platform='youtube').
             7. To search YouTube for videos or channels in general, use open_direct_youtube.
             8. Never ask the user to switch screen modes or provide coordinates. Just use the appropriate tool directly.
-            9. You are receiving a continuous video feed from the user's webcam or screen. NEVER comment on, describe, or ask about these images unless the user explicitly says 'look at this' or 'what do you see'. Treat the video feed as background only."""
+            9. You are receiving a continuous video feed from the user's webcam or screen. Do not comment on it unless the user asks.
+            10. To close any running app, browser, or program, use close_application. Trigger on words like 'close', 'exit', 'quit', 'kill', or 'shut down' followed by an app name.
+            11. To find a file anywhere on the computer by name, use search_file.
+            12. To open any file such as a video, image, exe, or document, use open_file. Just the filename is enough.
+            13. For list_files, use shortcuts like 'desktop', 'downloads', 'documents', 'videos', 'music', 'pictures' instead of full paths.
+            14. To move or relocate a file, use move_file. You can use folder shortcuts like 'Desktop' or 'Downloads' as the destination. If the user doesn't give the full path, use search_file first to find it, then move_file with the result."""
         )
         self.session = None
         self.audio_stream = None
@@ -351,6 +363,63 @@ class AI_Core(QObject):
             return {"status": "success", "message": f"Successfully read the file '{file_path}'.", "content": content}
         except Exception as e: return {"status": "error", "message": f"An error occurred while reading the file: {str(e)}"}
 
+    def _move_file(self, source_path, destination_path):
+        import shutil
+        try:
+            if not source_path or not isinstance(source_path, str):
+                return {"status": "error", "message": "Invalid source path provided."}
+            if not destination_path or not isinstance(destination_path, str):
+                return {"status": "error", "message": "Invalid destination path provided."}
+            if not os.path.exists(source_path):
+                return {"status": "error", "message": f"Source '{source_path}' does not exist."}
+            # Expand common shortcuts like Desktop, Downloads, etc.
+            home = os.path.expanduser("~")
+            shortcuts = {
+                "desktop": os.path.join(home, "Desktop"),
+                "downloads": os.path.join(home, "Downloads"),
+                "documents": os.path.join(home, "Documents"),
+                "videos": os.path.join(home, "Videos"),
+                "music": os.path.join(home, "Music"),
+                "pictures": os.path.join(home, "Pictures"),
+            }
+            dest_lower = destination_path.strip().lower()
+            if dest_lower in shortcuts:
+                destination_path = shortcuts[dest_lower]
+            # If destination is a directory, move into it keeping the original filename
+            if os.path.isdir(destination_path):
+                destination_path = os.path.join(destination_path, os.path.basename(source_path))
+            # Create any missing parent directories
+            os.makedirs(os.path.dirname(os.path.abspath(destination_path)), exist_ok=True)
+            shutil.move(source_path, destination_path)
+            return {"status": "success", "message": f"Moved to '{destination_path}'.", "destination": destination_path}
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to move file: {str(e)}"}
+
+    def _search_file_sync(self, filename):
+        """Synchronous file search — called via asyncio.to_thread to avoid blocking."""
+        home = os.path.expanduser("~")
+        search_roots = [
+            os.path.join(home, "Desktop"),
+            os.path.join(home, "Downloads"),
+            os.path.join(home, "Documents"),
+            os.path.join(home, "Videos"),
+            os.path.join(home, "Music"),
+            os.path.join(home, "Pictures"),
+            home,
+        ]
+        matches = []
+        for root_dir in search_roots:
+            if not root_dir or not os.path.isdir(root_dir): continue
+            for root, dirs, files in os.walk(root_dir):
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in
+                            ['Windows', 'System32', 'SysWOW64', 'WinSxS', '$Recycle.Bin', 'ProgramData', 'node_modules']]
+                for f in files:
+                    if filename.lower() in f.lower():
+                        matches.append(os.path.join(root, f))
+                if len(matches) >= 5:
+                    return matches
+        return matches
+
     def _open_application(self, application_name):
         print(f">>> [DEBUG] Attempting to open application: '{application_name}'")
         try:
@@ -369,6 +438,13 @@ class AI_Core(QObject):
                     "cmd": "cmd.exe",
                     "command prompt": "cmd.exe",
                     "powershell": "powershell.exe",
+                    "windows powershell": "powershell.exe",
+                    "powershell 7": "pwsh.exe",
+                    "pwsh": "pwsh.exe",
+                    "terminal": "wt.exe",
+                    "windows terminal": "wt.exe",
+                    "git bash": "git-bash.exe",
+                    "gitbash": "git-bash.exe",
                     "chrome": "chrome.exe",
                     "google chrome": "chrome.exe",
                     "firefox": "firefox.exe",
@@ -406,13 +482,21 @@ class AI_Core(QObject):
                     "whatsapp": "whatsapp.exe",
                     "filmora": "Wondershare Filmora Launcher.exe"
                 }
+
+                # These need a visible console window — Popen alone launches them invisibly
+                CONSOLE_APPS = {"cmd.exe", "powershell.exe", "pwsh.exe", "wt.exe", "git-bash.exe"}
+
                 exe = app_map.get(name_lower)
                 if exe:
-                    # URI protocols (like ms-teams:) use shell=True with start
+                    # URI protocols (like ms-teams:)
                     if exe.endswith(":"):
                         subprocess.Popen(f"start {exe}", shell=True)
                         return {"status": "success", "message": f"Successfully launched '{application_name}'."}
-                    # Try running directly first (works if in PATH)
+                    # Console/terminal apps must use 'start' to get a visible window
+                    if exe.lower() in CONSOLE_APPS:
+                        subprocess.Popen(f'start "" "{exe}"', shell=True)
+                        return {"status": "success", "message": f"Successfully launched '{application_name}'."}
+                    # Standard GUI apps — try direct launch first (works if in PATH)
                     try:
                         subprocess.Popen(exe, shell=False)
                         return {"status": "success", "message": f"Successfully launched '{application_name}'."}
@@ -420,11 +504,12 @@ class AI_Core(QObject):
                         pass
                     # Search common install locations
                     search_dirs = [
-                        os.environ.get("ProgramFiles", "C:\Program Files"),
-                        os.environ.get("ProgramFiles(x86)", "C:\Program Files (x86)"),
+                        os.environ.get("ProgramFiles", "C:\\Program Files"),
+                        os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"),
                         os.environ.get("LocalAppData", ""),
                         os.path.join(os.environ.get("LocalAppData", ""), "Programs"),
-                        os.path.join(os.environ.get("AppData", ""), "..\Local\Programs"),
+                        os.path.join(os.environ.get("AppData", ""), "..\\Local\\Programs"),
+                        os.path.join(os.environ.get("AppData", ""), "Local\\Programs"),
                     ]
                     for d in search_dirs:
                         if not d or not os.path.isdir(d): continue
@@ -433,11 +518,11 @@ class AI_Core(QObject):
                                 full_path = os.path.join(root, exe)
                                 subprocess.Popen(full_path, shell=False)
                                 return {"status": "success", "message": f"Launched '{application_name}' from {full_path}."}
-                    # Last resort: use start command
-                    subprocess.Popen(f"start {exe}", shell=True)
+                    # Last resort: use start command with proper quoting
+                    subprocess.Popen(f'start "" "{exe}"', shell=True)
                     return {"status": "success", "message": f"Attempted to launch '{application_name}'."}
                 else:
-                    subprocess.Popen(f"start {application_name}", shell=True)
+                    subprocess.Popen(f'start "" "{application_name}"', shell=True)
                     return {"status": "success", "message": f"Attempted to launch '{application_name}'."}
             elif sys.platform == "darwin":
                 app_map = {"calculator": "Calculator", "chrome": "Google Chrome", "firefox": "Firefox", "finder": "Finder", "textedit": "TextEdit", "obs": "OBS", "obs studio": "OBS", "discord": "Discord", "spotify": "Spotify"}
@@ -491,6 +576,86 @@ class AI_Core(QObject):
                 return {"status": "success", "message": f"Opened search for '{query}' on {platform}."}
         except Exception as e:
             return {"status": "error", "message": f"An error occurred: {str(e)}"}
+
+    def _close_application(self, application_name):
+        """Closes a running application by name using taskkill on Windows."""
+        print(f">>> [DEBUG] Closing application: '{application_name}'")
+        try:
+            if not application_name or not isinstance(application_name, str):
+                return {"status": "error", "message": "Invalid application name provided."}
+            name_lower = application_name.lower().strip()
+            if sys.platform == "win32":
+                # Map friendly names to process names
+                process_map = {
+                    "chrome": ["chrome.exe"],
+                    "google chrome": ["chrome.exe"],
+                    "brave": ["brave.exe"],
+                    "brave browser": ["brave.exe"],
+                    "firefox": ["firefox.exe"],
+                    "edge": ["msedge.exe"],
+                    "microsoft edge": ["msedge.exe"],
+                    "discord": ["discord.exe"],
+                    "spotify": ["spotify.exe"],
+                    "steam": ["steam.exe"],
+                    "obs": ["obs64.exe"],
+                    "obs studio": ["obs64.exe"],
+                    "vlc": ["vlc.exe"],
+                    "notepad": ["notepad.exe"],
+                    "calculator": ["calculatorapp.exe", "calc.exe"],
+                    "explorer": ["explorer.exe"],
+                    "file explorer": ["explorer.exe"],
+                    "task manager": ["taskmgr.exe"],
+                    "cmd": ["cmd.exe"],
+                    "command prompt": ["cmd.exe"],
+                    "powershell": ["powershell.exe"],
+                    "teams": ["ms-teams.exe", "teams.exe"],
+                    "microsoft teams": ["ms-teams.exe", "teams.exe"],
+                    "outlook": ["outlook.exe"],
+                    "word": ["winword.exe"],
+                    "microsoft word": ["winword.exe"],
+                    "excel": ["excel.exe"],
+                    "microsoft excel": ["excel.exe"],
+                    "powerpoint": ["powerpnt.exe"],
+                    "zoom": ["zoom.exe"],
+                    "telegram": ["telegram.exe"],
+                    "skype": ["skype.exe"],
+                    "mumuplayer": ["MuMuNxMain.exe"],
+                    "mumu": ["MuMuNxMain.exe"],
+                    "mumu player": ["MuMuNxMain.exe"],
+                    "epic games": ["epicgameslauncher.exe"],
+                    "vs code": ["code.exe"],
+                    "vscode": ["code.exe"],
+                    "visual studio code": ["code.exe"],
+                    "paint": ["mspaint.exe"],
+                    "filmora": ["Filmora.exe"],
+                    "whatsapp": ["whatsapp.exe"],
+                }
+                processes = process_map.get(name_lower, [application_name if application_name.endswith(".exe") else application_name + ".exe"])
+                killed = []
+                for proc in processes:
+                    result = subprocess.run(f"taskkill /F /IM {proc}", shell=True, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        killed.append(proc)
+                if killed:
+                    return {"status": "success", "message": f"Successfully closed '{application_name}'."}
+                else:
+                    # Try by window title as fallback
+                    result = subprocess.run(f'taskkill /F /FI "WINDOWTITLE eq *{application_name}*"', shell=True, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        return {"status": "success", "message": f"Closed '{application_name}' by window title."}
+                    return {"status": "not_found", "message": f"'{application_name}' does not appear to be running."}
+            elif sys.platform == "darwin":
+                result = subprocess.run(["pkill", "-x", application_name], capture_output=True)
+                if result.returncode == 0:
+                    return {"status": "success", "message": f"Closed '{application_name}'."}
+                return {"status": "not_found", "message": f"'{application_name}' does not appear to be running."}
+            else:
+                result = subprocess.run(["pkill", application_name], capture_output=True)
+                if result.returncode == 0:
+                    return {"status": "success", "message": f"Closed '{application_name}'."}
+                return {"status": "not_found", "message": f"'{application_name}' does not appear to be running."}
+        except Exception as e:
+            return {"status": "error", "message": f"Failed to close '{application_name}': {str(e)}"}
 
     def _open_website(self, url):
         print(f">>> [DEBUG] Attempting to open URL: '{url}'")
@@ -574,17 +739,161 @@ class AI_Core(QObject):
                         for fc in chunk.tool_call.function_calls:
                             args, result = fc.args, {}
                             print(f">>> [DEBUG] Tool call: {fc.name} args={args}")
-                            if fc.name == "create_folder": result = self._create_folder(folder_path=args.get("folder_path"))
-                            elif fc.name == "create_file": result = self._create_file(file_path=args.get("file_path"), content=args.get("content"))
-                            elif fc.name == "edit_file": result = self._edit_file(file_path=args.get("file_path"), content=args.get("content"))
+
+                            if fc.name == "create_folder":
+                                path = args.get("folder_path", "")
+                                result = self._create_folder(folder_path=path)
+                                ok = result.get("status") == "success"
+                                icon = "📁" if ok else "⚠"
+                                color = "#90EE90" if ok else "#ff9944"
+                                self.tool_activity_received.emit("📁 CREATE FOLDER",
+                                    f'<p style="color:{color};">{icon} <span style="color:#87CEEB;">{escape(path)}</span><br>'
+                                    f'<span style="color:#888; font-size:9pt;">{escape(result.get("message",""))}</span></p>')
+
+                            elif fc.name == "create_file":
+                                path = args.get("file_path", "")
+                                result = self._create_file(file_path=path, content=args.get("content", ""))
+                                ok = result.get("status") == "success"
+                                lines = len(args.get("content","").splitlines())
+                                color = "#90EE90" if ok else "#ff9944"
+                                self.tool_activity_received.emit("📄 CREATE FILE",
+                                    f'<p style="color:{color};">📄 <span style="color:#87CEEB;">{escape(path)}</span><br>'
+                                    f'<span style="color:#888; font-size:9pt;">{lines} line(s) written &mdash; {escape(result.get("message",""))}</span></p>')
+
+                            elif fc.name == "edit_file":
+                                path = args.get("file_path", "")
+                                result = self._edit_file(file_path=path, content=args.get("content", ""))
+                                ok = result.get("status") == "success"
+                                color = "#90EE90" if ok else "#ff9944"
+                                self.tool_activity_received.emit("✏ EDIT FILE",
+                                    f'<p style="color:{color};">✏ <span style="color:#87CEEB;">{escape(path)}</span><br>'
+                                    f'<span style="color:#888; font-size:9pt;">{escape(result.get("message",""))}</span></p>')
+
                             elif fc.name == "list_files":
                                 result = self._list_files(directory_path=args.get("directory_path"))
-                                if result.get("status") == "success": file_list_data = (result.get("directory_path"), result.get("files"))
-                            elif fc.name == "read_file": result = self._read_file(file_path=args.get("file_path"))
-                            elif fc.name == "open_application": result = self._open_application(application_name=args.get("application_name"))
-                            elif fc.name == "open_website": result = self._open_website(url=args.get("url"))
-                            elif fc.name == "open_direct_youtube": result = self._open_direct_youtube(query=args.get("query"), content_type=args.get("content_type", "channel"))
-                            elif fc.name == "search_and_open": result = self._search_and_open(query=args.get("query"), platform=args.get("platform", "youtube"))
+                                if result.get("status") == "success":
+                                    file_list_data = (result.get("directory_path"), result.get("files"))
+
+                            elif fc.name == "read_file":
+                                path = args.get("file_path", "")
+                                result = self._read_file(file_path=path)
+                                ok = result.get("status") == "success"
+                                color = "#90EE90" if ok else "#ff9944"
+                                preview = result.get("content", "")[:120].replace("\n", " ") if ok else result.get("message", "")
+                                self.tool_activity_received.emit("📖 READ FILE",
+                                    f'<p>📖 <span style="color:#87CEEB;">{escape(path)}</span></p>'
+                                    f'<p style="color:{color}; font-size:9pt; font-style:italic;">{escape(preview)}{"..." if len(result.get("content","")) > 120 else ""}</p>')
+
+                            elif fc.name == "open_application":
+                                app = args.get("application_name", "")
+                                self.tool_activity_received.emit("🚀 LAUNCHING APP",
+                                    f'<p>🚀 <span style="color:#00ffff; font-weight:bold;">{escape(app)}</span>'
+                                    f'<span style="color:#888;"> &mdash; initializing...</span></p>')
+                                result = self._open_application(application_name=app)
+                                ok = result.get("status") == "success"
+                                color = "#90EE90" if ok else "#ff9944"
+                                icon = "✔" if ok else "✘"
+                                self.tool_activity_received.emit("🚀 APP LAUNCHED",
+                                    f'<p style="color:{color};">{icon} <span style="color:#00ffff;">{escape(app)}</span> &mdash; {escape(result.get("message",""))}</p>')
+
+                            elif fc.name == "close_application":
+                                app = args.get("application_name", "")
+                                self.tool_activity_received.emit("⏹ CLOSING APP",
+                                    f'<p>⏹ Terminating <span style="color:#ff9944; font-weight:bold;">{escape(app)}</span>...</p>')
+                                result = self._close_application(application_name=app)
+                                ok = result.get("status") == "success"
+                                color = "#90EE90" if ok else "#ff6b6b"
+                                icon = "✔" if ok else "✘"
+                                self.tool_activity_received.emit("⏹ APP CLOSED",
+                                    f'<p style="color:{color};">{icon} <span style="color:#ff9944;">{escape(app)}</span> &mdash; {escape(result.get("message",""))}</p>')
+
+                            elif fc.name == "open_website":
+                                url = args.get("url", "")
+                                result = self._open_website(url=url)
+                                ok = result.get("status") == "success"
+                                display = url.split("//")[-1].split("/")[0] if "//" in url else url
+                                color = "#90EE90" if ok else "#ff9944"
+                                self.tool_activity_received.emit("🌐 OPEN WEBSITE",
+                                    f'<p>🌐 <a href="{escape(url)}" style="color:#00ffff; text-decoration:none;">{escape(display)}</a></p>'
+                                    f'<p style="color:{color}; font-size:9pt;">{escape(result.get("message",""))}</p>')
+
+                            elif fc.name == "open_direct_youtube":
+                                query = args.get("query", "")
+                                ctype = args.get("content_type", "channel")
+                                result = self._open_direct_youtube(query=query, content_type=ctype)
+                                self.tool_activity_received.emit("▶ YOUTUBE SEARCH",
+                                    f'<p>▶ <span style="color:#ff4444;">You</span><span style="color:#ffffff;">Tube</span>'
+                                    f' &mdash; <span style="color:#00ffff;">{escape(query)}</span>'
+                                    f' <span style="color:#888; font-size:9pt;">({ctype})</span></p>')
+
+                            elif fc.name == "search_and_open":
+                                query = args.get("query", "")
+                                platform = args.get("platform", "youtube")
+                                result = self._search_and_open(query=query, platform=platform)
+                                plat_color = "#ff4444" if platform == "youtube" else "#4488ff"
+                                self.tool_activity_received.emit("🔍 SEARCH & OPEN",
+                                    f'<p>🔍 <span style="color:{plat_color}; font-weight:bold;">{escape(platform.upper())}</span>'
+                                    f' &rarr; <span style="color:#00ffff;">{escape(query)}</span></p>'
+                                    f'<p style="color:#90EE90; font-size:9pt;">Opening best match...</p>')
+
+                            elif fc.name == "search_file":
+                                filename = args.get("filename", "")
+                                print(f">>> [DEBUG] Searching for file: {filename}")
+                                self.tool_activity_received.emit("🔍 FILE SEARCH",
+                                    f'<p>🔍 Scanning directories for <span style="color:#00ffff;">{escape(filename)}</span>...'
+                                    f'<br><span style="color:#888; font-size:9pt;">Desktop · Downloads · Documents · Videos · Music · Pictures</span></p>')
+                                matches = await asyncio.to_thread(self._search_file_sync, filename)
+                                if matches:
+                                    result = {"status": "success", "message": f"Found {len(matches)} match(es).", "matches": matches, "best_match": matches[0]}
+                                else:
+                                    result = {"status": "not_found", "message": f"No file matching '{filename}' found."}
+                                self.file_search_received.emit(filename, matches)
+
+                            elif fc.name == "open_file":
+                                file_path = args.get("file_path")
+                                filename = args.get("filename")
+                                if not file_path and filename:
+                                    self.tool_activity_received.emit("🔍 LOCATING FILE",
+                                        f'<p>🔍 Locating <span style="color:#00ffff;">{escape(filename)}</span>...'
+                                        f'<br><span style="color:#888; font-size:9pt;">Scanning common folders...</span></p>')
+                                    matches = await asyncio.to_thread(self._search_file_sync, filename)
+                                    file_path = matches[0] if matches else None
+                                    if matches:
+                                        self.file_search_received.emit(filename, matches)
+                                if file_path and os.path.exists(file_path):
+                                    try:
+                                        if sys.platform == "win32":
+                                            os.startfile(file_path)
+                                        else:
+                                            subprocess.Popen(["xdg-open", file_path])
+                                        result = {"status": "success", "message": f"Opened '{os.path.basename(file_path)}' successfully."}
+                                        self.file_opened_received.emit(file_path)
+                                    except Exception as e:
+                                        result = {"status": "error", "message": f"Failed to open file: {str(e)}"}
+                                        self.tool_activity_received.emit("⚠ OPEN FAILED",
+                                            f'<p style="color:#ff6b6b;">⚠ {escape(str(e))}</p>')
+                                else:
+                                    result = {"status": "not_found", "message": f"File not found: '{file_path or filename}'."}
+                                    self.tool_activity_received.emit("⚠ FILE NOT FOUND",
+                                        f'<p style="color:#ff6b6b;">⚠ Could not locate <span style="color:#00ffff;">{escape(filename or file_path or "?")}</span></p>')
+
+                            elif fc.name == "move_file":
+                                src = args.get("source_path", "")
+                                dst = args.get("destination_path", "")
+                                src_name = os.path.basename(src)
+                                self.tool_activity_received.emit("📦 MOVING FILE",
+                                    f'<p>📦 <span style="color:#00ffff;">{escape(src_name)}</span>'
+                                    f'<br><span style="color:#888; font-size:9pt;">'
+                                    f'{escape(src)}<br>&#8595; {escape(dst)}</span></p>')
+                                result = self._move_file(source_path=src, destination_path=dst)
+                                ok = result.get("status") == "success"
+                                color = "#90EE90" if ok else "#ff6b6b"
+                                icon = "✔" if ok else "✘"
+                                dest_final = result.get("destination", dst)
+                                self.tool_activity_received.emit("📦 FILE MOVED",
+                                    f'<p style="color:{color};">{icon} <span style="color:#00ffff;">{escape(src_name)}</span>'
+                                    f'<br><span style="color:#888; font-size:9pt;">&#8594; {escape(dest_final)}</span></p>')
+
                             function_responses.append({"id": fc.id, "name": fc.name, "response": result})
                         await self.session.send_tool_response(function_responses=function_responses)
                         continue
@@ -646,7 +955,7 @@ class AI_Core(QObject):
             self.text_input_queue.task_done()
 
     async def tts(self):
-        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id=eleven_turbo_v2_5&output_format=pcm_24000"
+        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_TYPE}/stream-input?model_id=eleven_turbo_v2_5&output_format=pcm_24000"
         while self.is_running:
             text_chunk = await self.response_queue_tts.get()
             if text_chunk is None or not self.is_running:
@@ -781,7 +1090,7 @@ class MainWindow(QMainWindow):
                 border: 1px solid #00a1c1;
                 border-radius: 0px; 
             }
-            QLabel#tool_activity_display { 
+            QTextBrowser#tool_activity_display { 
                 background-color: #0a0a1a; 
                 color: #a0a0ff; 
                 font-family: 'Consolas', 'Monaco', monospace;
@@ -831,9 +1140,9 @@ class MainWindow(QMainWindow):
         self.left_layout.setSpacing(0)
         self.tool_activity_title = QLabel("SYSTEM ACTIVITY"); self.tool_activity_title.setObjectName("tool_activity_title")
         self.left_layout.addWidget(self.tool_activity_title)
-        self.tool_activity_display = QLabel(); self.tool_activity_display.setObjectName("tool_activity_display")
-        self.tool_activity_display.setWordWrap(True); self.tool_activity_display.setAlignment(Qt.AlignTop)
-        self.tool_activity_display.setOpenExternalLinks(True); self.tool_activity_display.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self.tool_activity_display = QTextBrowser(); self.tool_activity_display.setObjectName("tool_activity_display")
+        self.tool_activity_display.setReadOnly(True)
+        self.tool_activity_display.setOpenExternalLinks(True)
         self.left_layout.addWidget(self.tool_activity_display, 1)
         self.middle_panel = QWidget(); self.middle_panel.setObjectName("middle_panel")
         self.middle_layout = QVBoxLayout(self.middle_panel)
@@ -905,6 +1214,9 @@ class MainWindow(QMainWindow):
         self.ai_core.search_results_received.connect(self.update_search_results)
         self.ai_core.code_being_executed.connect(self.display_executed_code)
         self.ai_core.file_list_received.connect(self.update_file_list)
+        self.ai_core.file_search_received.connect(self.update_file_search)
+        self.ai_core.file_opened_received.connect(self.update_file_opened)
+        self.ai_core.tool_activity_received.connect(self.update_tool_activity)
         self.ai_core.end_of_turn.connect(self.add_newline)
         self.ai_core.frame_received.connect(self.update_frame)
         self.ai_core.video_mode_changed.connect(self.update_video_mode_ui)
@@ -953,55 +1265,107 @@ class MainWindow(QMainWindow):
         cursor.insertText(text)
         self.text_display.verticalScrollBar().setValue(self.text_display.verticalScrollBar().maximum())
 
+    def _append_activity(self, tag, html_body):
+        """Appends a timestamped activity block to the system log."""
+        import datetime
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        header = f'<p style="color:#00d1ff; font-weight:bold; margin:8px 0 2px 0;">[{ts}] {tag}</p>'
+        self.tool_activity_display.append(header + html_body)
+        self.tool_activity_display.verticalScrollBar().setValue(
+            self.tool_activity_display.verticalScrollBar().maximum()
+        )
+
     @Slot(list)
     def update_search_results(self, urls):
-        base_title = "SYSTEM ACTIVITY"
         if not urls:
-            if "SEARCH" in self.tool_activity_title.text():
-                self.tool_activity_display.clear(); self.tool_activity_title.setText(base_title)
             return
-        self.tool_activity_display.clear()
-        self.tool_activity_title.setText(f"{base_title} // SEARCH")
+        self.tool_activity_title.setText("SYSTEM ACTIVITY // SEARCH")
         html_content = ""
         for i, url in enumerate(urls):
             display_text = url.split('//')[1].split('/')[0] if '//' in url else url
-            html_content += f'<p style="margin:0; padding: 4px;">{i+1}: <a href="{url}" style="color: #00ffff; text-decoration: none;">{display_text}</a></p>'
-        self.tool_activity_display.setText(html_content)
+            html_content += f'<p style="margin:0; padding: 2px 0;">{i+1}: <a href="{url}" style="color: #00ffff; text-decoration: none;">{display_text}</a></p>'
+        self._append_activity("&#128269; WEB SEARCH", html_content)
 
     @Slot(str, str)
     def display_executed_code(self, code, result):
-        base_title = "SYSTEM ACTIVITY"
         if not code:
-            if "CODE EXEC" in self.tool_activity_title.text():
-                 self.tool_activity_display.clear(); self.tool_activity_title.setText(base_title)
             return
-        self.tool_activity_display.clear()
-        self.tool_activity_title.setText(f"{base_title} // CODE EXEC")
+        self.tool_activity_title.setText("SYSTEM ACTIVITY // CODE EXEC")
         html = f'<pre style="white-space: pre-wrap; word-wrap: break-word; color: #e0e0ff; font-size: 9pt; line-height: 1.4;">{escape(code)}</pre>'
         if result:
-            html += f'<p style="color:#00d1ff; font-weight:bold; margin-top:10px; margin-bottom: 5px;">&gt; OUTPUT:</p><pre style="white-space: pre-wrap; word-wrap: break-word; color: #90EE90; font-size: 9pt;">{escape(result.strip())}</pre>'
-        self.tool_activity_display.setText(html)
+            html += f'<p style="color:#00d1ff; font-weight:bold; margin-top:6px; margin-bottom:3px;">&gt; OUTPUT:</p><pre style="white-space: pre-wrap; word-wrap: break-word; color: #90EE90; font-size: 9pt;">{escape(result.strip())}</pre>'
+        self._append_activity("&#128187; CODE EXECUTION", html)
 
     @Slot(str, list)
     def update_file_list(self, directory_path, files):
-        base_title = "SYSTEM ACTIVITY"
         if not directory_path:
-            if "FILESYS" in self.tool_activity_title.text():
-                self.tool_activity_display.clear(); self.tool_activity_title.setText(base_title)
             return
-        self.tool_activity_display.clear()
-        self.tool_activity_title.setText(f"{base_title} // FILESYS")
-        html = f'<p style="color:#00d1ff; margin-bottom: 5px;">DIR &gt; <strong>{escape(directory_path)}</strong></p>'
+        self.tool_activity_title.setText("SYSTEM ACTIVITY // FILESYS")
+        # Build breadcrumb path visualization
+        parts = directory_path.replace("\\", "/").split("/")
+        breadcrumb = ""
+        for i, part in enumerate(parts):
+            if not part:
+                continue
+            sep = " &#9658; " if i > 0 and breadcrumb else ""
+            breadcrumb += f'{sep}<span style="color:#87CEEB;">{escape(part)}</span>'
+        html = f'<p style="margin-bottom:4px;">&#128193; {breadcrumb}</p>'
         if not files:
-            html += '<p style="margin-top:5px; color:#a0a0ff;"><em>(Directory is empty)</em></p>'
+            html += '<p style="color:#a0a0ff; font-style:italic;">(Directory is empty)</p>'
         else:
             folders = sorted([i for i in files if os.path.isdir(os.path.join(directory_path, i))])
             file_items = sorted([i for i in files if not os.path.isdir(os.path.join(directory_path, i))])
-            html += '<ul style="list-style-type:none; padding-left: 5px; margin-top: 5px;">'
-            for folder in folders: html += f'<li style="margin: 2px 0; color: #87CEEB;">[+] {escape(folder)}</li>'
-            for file_item in file_items: html += f'<li style="margin: 2px 0; color: #e0e0ff;">&#9679; {escape(file_item)}</li>'
-            html += '</ul>'
-        self.tool_activity_display.setText(html)
+            html += '<div style="padding-left:8px; border-left: 2px solid #00a1c1; margin-top:4px;">'
+            for folder in folders:
+                html += f'<p style="margin:1px 0; color:#87CEEB;">&#128194; {escape(folder)}/</p>'
+            for file_item in file_items:
+                html += f'<p style="margin:1px 0; color:#e0e0ff;">&#128196; {escape(file_item)}</p>'
+            html += '</div>'
+        self._append_activity("&#128194; FILE SYSTEM", html)
+
+    @Slot(str, str)
+    def update_tool_activity(self, tag, html_body):
+        self.tool_activity_title.setText(f"SYSTEM ACTIVITY // {tag.split()[-1]}")
+        self._append_activity(tag, html_body)
+
+    @Slot(str, list)
+    def update_file_search(self, query, matches):
+        self.tool_activity_title.setText("SYSTEM ACTIVITY // FILE SEARCH")
+        html = f'<p style="margin-bottom:4px;">&#128269; Searching for: <span style="color:#00ffff;">{escape(query)}</span></p>'
+        if not matches:
+            html += '<p style="color:#ff6b6b; font-style:italic;">&#10007; No matches found.</p>'
+        else:
+            html += '<div style="padding-left:8px; border-left: 2px solid #00ffff; margin-top:4px;">'
+            for i, path in enumerate(matches):
+                # Visualize path segments as a breadcrumb tree
+                parts = path.replace("\\", "/").split("/")
+                indent = ""
+                for j, part in enumerate(parts[:-1]):
+                    indent += "&nbsp;&nbsp;"
+                filename = parts[-1]
+                prefix = "&#128196;" if i == 0 else "&#128196;"
+                color = "#00ffff" if i == 0 else "#c0c0ff"
+                html += f'<p style="margin:1px 0; color:{color};">{prefix} <span style="color:#888;">{escape("/".join(parts[:-1]))}/</span><strong>{escape(filename)}</strong></p>'
+            html += '</div>'
+            if len(matches) == 1:
+                html += f'<p style="color:#90EE90; margin-top:4px;">&#10003; 1 match found.</p>'
+            else:
+                html += f'<p style="color:#90EE90; margin-top:4px;">&#10003; {len(matches)} matches found.</p>'
+        self._append_activity("&#128270; FILE SEARCH", html)
+
+    @Slot(str)
+    def update_file_opened(self, file_path):
+        self.tool_activity_title.setText("SYSTEM ACTIVITY // FILE OPEN")
+        parts = file_path.replace("\\", "/").split("/")
+        filename = parts[-1]
+        dir_path = "/".join(parts[:-1])
+        html = (
+            f'<p style="margin:2px 0;">&#128194; <span style="color:#888;">{escape(dir_path)}/</span></p>'
+            f'<p style="margin:2px 0; padding-left:12px; border-left:2px solid #00ffff;">'
+            f'&#128196; <span style="color:#00ffff; font-weight:bold;">{escape(filename)}</span>'
+            f' <span style="color:#90EE90;">&#9654; OPENED</span></p>'
+        )
+        self._append_activity("&#128196; FILE OPENED", html)
 
     @Slot()
     def add_newline(self):
