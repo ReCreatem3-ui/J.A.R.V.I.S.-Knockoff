@@ -129,15 +129,17 @@ Just say the name — no setup needed:
 
 ```
 "Open Discord"
-"Close Brave"
+"Close Discord"
 "Open Command Prompt"
 "Move notes.txt to Desktop"
 "Search for my resume on my computer"
+"Search for a png file named selfie"
 "Open facebook.com"
 "Search YouTube for lo-fi music"
 "Open Ejiogu Dennis on YouTube"
 "What's the weather today?"
 "Create a file called notes.txt"
+"Create a folder named Desktop"
 ```
 
 ---
