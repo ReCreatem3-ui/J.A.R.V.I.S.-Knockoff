@@ -138,7 +138,6 @@ Just say the name — no setup needed:
 "Open Ejiogu Dennis on YouTube"
 "What's the weather today?"
 "Create a file called notes.txt"
-"Search for class suspension Philippines 2026"
 ```
 
 ---
