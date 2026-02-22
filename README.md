@@ -84,11 +84,13 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 | What you say | App |
 |---|---|
 | "notepad" | Notepad |
+| "sticky note" | Sticky Note |
 | "chrome" / "google chrome" | Google Chrome |
 | "brave" / "brave browser" | Brave Browser |
 | "firefox" | Firefox |
 | "edge" / "microsoft edge" | Microsoft Edge |
 | "vlc" | VLC Media Player |
+| "vscode" | Visual Studio Code |
 | "file explorer" | Windows Explorer |
 | "cmd" / "command prompt" | Command Prompt |
 | "powershell" | PowerShell |
@@ -98,7 +100,8 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 | "edge" | Microsoft Edge |
 | "powerpoint" | Microsoft Powerpoint |
 | "microsoft teams" | Microsoft Teams |
-| "calculator " | Windows Calculator | 
+| "calculator " | Windows Calculator |
+| "snipping tool" | Snipping Tool |
 
 ---
 
