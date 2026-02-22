@@ -116,4 +116,10 @@ Find the `app_map` dictionary inside the `_open_application` function (search fo
 
 ---
 
+## ⚠️ Disclaimer
+
+This project was created purely for educational purposes as part of a school activity. The goal was to find a Python project on YouTube, study it, and upload it to GitHub as a practice exercise. The original code belongs to Nazir Louis — this is simply a modified version made for learning. No commercial intent whatsoever.
+
+---
+
 *"Just a J.A.R.V.I.S. knockoff — but it's mine.", ReCreatem3*
