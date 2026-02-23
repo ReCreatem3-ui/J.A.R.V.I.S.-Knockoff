@@ -64,7 +64,7 @@ ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
 3. Run the assistant:
 
 ```bash
-python wilson.py
+python alyx.py
 ```
 
 ---
