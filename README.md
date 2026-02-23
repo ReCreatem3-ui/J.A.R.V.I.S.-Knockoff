@@ -1,4 +1,4 @@
-# W.I.L.S.O.N. — Your J.A.R.V.I.S. AI Assistant Knockoff
+# A.L.Y.X. — Your J.A.R.V.I.S. AI Assistant Knockoff
 
 > A personal AI desktop assistant inspired by **A.D.A.** by [Nazir Louis](https://github.com/nazirlouis/ada).  
 > This is a modified and extended version built on top of the original concept. Full credit and inspiration goes to the original author.
@@ -18,7 +18,7 @@ Please check out and support the original creator.
 
 ## ✨ What's New in This Version
 
-Built on top of the original A.D.A., W.I.L.S.O.N. adds the following improvements:
+Built on top of the original A.D.A., A.L.Y.X. adds the following improvements:
 
 - ✅ Upgraded to `gemini-2.5-flash-native-audio-latest` for native voice responses
 - ✅ Voice selection via Gemini's built-in voices — no longer dependent on ElevenLabs for output
@@ -47,7 +47,7 @@ pip install PySide6 opencv-python pyaudio google-genai python-dotenv pillow nump
 ## 🔑 Setup
 
 1. Clone or download this repository
-2. Create a `.env` file in the same folder as `wilson.py`:
+2. Create a `.env` file in the same folder as `alyx.py`:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
@@ -66,7 +66,7 @@ python wilson.py
 
 ## 📱 Adding Custom App Paths
 
-W.I.L.S.O.N. already knows how to launch common apps by name. If an app fails to open, you can register it manually in `wilson.py`.
+A.L.Y.X. already knows how to launch common apps by name. If an app fails to open, you can register it manually in `alyx.py`.
 
 Find the `app_map` dictionary inside `_open_application` (search for `app_map = {`) and add your app like this:
 
