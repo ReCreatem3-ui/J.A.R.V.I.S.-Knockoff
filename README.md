@@ -31,6 +31,11 @@ Built on top of the original A.D.A., A.L.Y.X. adds the following improvements:
 - ✅ `browser_search` — supports Google, YouTube, and Bing
 - ✅ Google Search and Code Execution tools re-integrated
 - ✅ Video feed no longer triggers unprompted AI commentary
+- ✅ Smart site launcher — say "open YouTube", "open Reddit", or "open GitHub" to navigate directly to official homepages
+- ✅ YouTube-specific navigation — attempts direct `@handle` URL lookup before falling back to channel search
+- ✅ `search_and_open` — resolves and opens YouTubers, creators, or topics directly on YouTube or Google
+- ✅ `open_direct_youtube` — searches YouTube filtered by channel, video, or general query via direct URL
+- ✅ Fallback behavior — unrecognized site names are passed as a Google search query automatically
 
 ---
 
